@@ -1,4 +1,7 @@
-FN ORDER
+// THIS IS NOT AN ACTUAL CONTRACT.
+// .sol extension only added for IDE coloring.
+
+// FN ORDER:
 // CONSTRUCTOR
 // RECEIVE (IF EXISTS)
 // FALLBACK (IF EXISTS)
@@ -8,7 +11,7 @@ FN ORDER
 // PRIVATE
 // (normal/view/pure order within groupings)
 
-FN VISIBILITY ORDER
+// FN VISIBILITY ORDER:
 // Visibility
 // Mutability
 // Virtual
@@ -27,7 +30,7 @@ function thisFunctionNameIsReallyLong(address x, address y, address z)
 function thisFunctionNameIsReallyLong(
     address x,
     address y,
-    address z,
+    address z
 )
     public
     onlyOwner
@@ -49,7 +52,7 @@ function thisFunctionNameIsReallyLong(
         uint256 Argument
     )
 {
-    doSomething()
+    doSomething();
 
     return (
         veryLongReturnArg1,

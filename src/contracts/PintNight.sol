@@ -11,6 +11,7 @@ contract PintNight is Ownable {
     using SafeMath for uint8;
 
     enum State { NOT_INITIATED, INVITE_PERIOD, AWAITING_EVENT, EVENT_PERIOD, COMPLETE }
+
     struct Event {
         string name;
         // State - 0 to 4 enum
@@ -28,4 +29,5 @@ contract PintNight is Ownable {
 
     mapping (uint => address) public eventToHost;
     mapping (uint => address[]) public eventToAttendees;
+    mapping (uint => address[]) public eventToInvited;
 }
