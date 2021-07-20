@@ -60,7 +60,7 @@ contract EventCreation is PintNight {
     modifier onlyAttendee(uint _eventId) {
         // The below may error out. Trying to shallow copy arr.
         // Memory arrs need a fixed length.
-        bool memory isAttendee = false;
+        bool isAttendee = false;
         address[] memory attendees = new address[](eventToAttendees[_eventId].length);
         attendees = eventToAttendees[_eventId];
 
@@ -83,8 +83,8 @@ contract EventCreation is PintNight {
     // Use ownable constructor to set ownership to my address.
     // Use custom fuction to initiate contract details upon call from FE app.
     function initEvent(
-        string _name,
-        string _location,
+        string memory _name,
+        string memory _location,
         uint256 _coordinates,
         uint256 _date
     )
@@ -94,10 +94,19 @@ contract EventCreation is PintNight {
         require(msg.value >= minFee, "Escrow amount insufficient. Please increase its value.");
         require(msg.value <= maxFee, "Escrow amount too large. Please decrease its value.");
 
-        // Non-named vars -- [created: now, state: 0]
-        uint id = events.push(Event(_name, _location, _coordinates, now, _date, msg.value, State.NOT_INITIATED));
+        // Non-named vars -- [created: block.timestamp, state: 0]
+        // block.timestamp is an alias for "now". "now" is dep.
+        events.push(Event(_name, _location, _coordinates, block.timestamp, _date, msg.value, State.NOT_INITIATED));
+
+        uint id = events.length.sub(1);
+
+        // Attendance
         eventToHost[id] = msg.sender;
-        eventToAttendees[id] = eventToAttendees[id].push(msg.sender);
+        eventToAttendees[id].push(msg.sender);
+
+        // Balance
+        eventToBalance[id] = eventToBalance[id].add(msg.value);
+
         emit NewEvent(id, _name, _location, _date, msg.sender);
     }
 
@@ -106,6 +115,12 @@ contract EventCreation is PintNight {
     // FALLBACK (if exists)
 
     // EXTERNAL
+    // Automaticlaly called when transitioning to COMPLETE.
+    // _feeAmt will be 1% of total pool before it is redistributed.
+    function withdrawFees(uint _feeAmt) external onlyOwner {
+        payable(owner()).transfer(_feeAmt);
+    }
+
     function setMinFee(uint _newMinFee) external onlyOwner {
         minFee = _newMinFee;
     }
@@ -116,7 +131,7 @@ contract EventCreation is PintNight {
 
     // PUBLIC
     function inviteUser(uint _eventId, address _invited) public eventInvitePeriod(_eventId) onlyHost(_eventId) {
-        eventToInvited[_eventId] = eventToInvited[_eventId].push(_invited);
+        eventToInvited[_eventId].push(_invited);
         emit UserInvited(_eventId, events[_eventId].name, msg.sender, _invited);
     }
 
@@ -130,7 +145,7 @@ contract EventCreation is PintNight {
     // PRIVATE
 
     // INTERNAL
-    function addAttendeeToEvent(uint _id, address _attendee) internal onlyHost {
-        eventToAttendees[_id] = eventToAttendees[_id].push(_attendee);
+    function addAttendeeToEvent(uint _eventId, address _attendee) internal onlyHost(_eventId) {
+        eventToAttendees[_eventId].push(_attendee);
     }
 }
