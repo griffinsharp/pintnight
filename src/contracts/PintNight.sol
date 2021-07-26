@@ -37,6 +37,7 @@ contract PintNight is Ownable {
 
     mapping (uint => address[]) internal eventToAttendees;
     mapping (uint => uint) internal eventToBalance;
+    mapping (uint => address[]) internal eventToCheckedIn;
     mapping (uint => address) internal eventToHost;
     mapping (uint => address[]) internal eventToInvitees;
 }

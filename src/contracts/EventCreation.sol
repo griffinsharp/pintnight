@@ -50,18 +50,21 @@ contract EventCreation is PintNight {
     );
 
     event FailedEvent(
-
+        string name,
+        string location,
+        uint256 eventDate,
+        uint256 stateTransitionTime
     );
 
     // User checks in
-    event checkIn(
+    event CheckIn(
         string eventName,
         string location,
         address userAddress,
         uint256 checkInTime
     );
 
-    event eventStarted(
+    event EventStarted(
         string eventName,
         string location,
         address userAddress,
@@ -73,7 +76,7 @@ contract EventCreation is PintNight {
     // Fee = escrow amount the host sets when creating the event.
     // $1.88 USD to $18.82 USD roughly.
     // UI should reccomend $5-10 USD in ether (avg pub beer price).
-    // To Do: Can I save on uint amt here?
+    // To Do: Can I save on uint amt here to smaller uint#?
     uint256 minFee = 0.001 ether;
     uint256 maxFee = 0.01 ether;
 
@@ -106,6 +109,11 @@ contract EventCreation is PintNight {
 
     modifier eventInvitePeriod(uint _eventId) {
         require(events[_eventId].state == State.BEFORE_EVENT, 'It is not the event invite period.');
+        _;
+    }
+
+    modifier eventPeriod(uint _eventId) {
+        require(events[_eventId].state == State.EVENT_PERIOD, 'It is not the event period.');
         _;
     }
 
@@ -224,21 +232,37 @@ contract EventCreation is PintNight {
         emit UserInvited(_eventId, events[_eventId].name, msg.sender, _invited);
     }
 
-    // NEED: 1.) Invite Period 2.) Be Attendee 3.) Correct time (be after event date to (date + 30 mins))
+    // NEED: 1.) Invite Period 2.) Be Attendee 3.) Correct time (be after event date to (date + 15 mins))
     // Worth noting that both the timestamp and the block hash can be influenced by miners to some degree.
-    // Realistically, abuse isn't really practical here given the nature of our app.
-    function rollCall(uint _eventId) external eventInvitePeriod(_eventId) onlyAttendee(_eventId) {
+    // Realistically, abuse isn't really practical here given the nature of the app and amt of Ether involved.
+    function rollCall(uint _eventId) public eventInvitePeriod(_eventId) onlyAttendee(_eventId) {
         Event storage ourEpicEvent = events[_eventId];
-        uint currentTime = block.timestamp;
-        uint upperCheckinTime = ourEpicEvent.date.add(30 minutes);
-        require(ourEpicEvent.date >= currentTime, "Event has not yet started. Try checking in again later.");
+        uint upperCheckinTime = ourEpicEvent.date.add(15 minutes);
 
-        if (currentTime <= upperCheckinTime) {
+        // checkInForEvent is only able to be called during the event. This is called when the state is BEFORE_EVENT.
+        // Need to check to make sure it's not being called prematurely.
+        require(ourEpicEvent.date >= block.timestamp, "Event has not yet started. Try checking in again later.");
+
+        if (block.timestamp <= upperCheckinTime) {
             ourEpicEvent.state = State.EVENT_PERIOD;
-            emit eventStarted(ourEpicEvent.name, ourEpicEvent.location, msg.sender, block.timestamp, ourEpicEvent.date);
-            emit checkIn(ourEpicEvent.name, ourEpicEvent.location, msg.sender, block.timestamp);
+            _addAttendeeToCheckedIn(_eventId, msg.sender);
+
+            emit EventStarted(ourEpicEvent.name, ourEpicEvent.location, msg.sender, block.timestamp, ourEpicEvent.date);
+            emit CheckIn(ourEpicEvent.name, ourEpicEvent.location, msg.sender, block.timestamp);
         } else {
-            ourEpicEvent.state = State.EVENT_COMPLETE;
+            _markEventFailed(ourEpicEvent);
+        }
+    }
+
+    function checkInForEvent(uint _eventId) public eventPeriod(_eventId) onlyAttendee(_eventId) {
+        Event storage ourEpicEvent = events[_eventId];
+        uint upperCheckinTime = ourEpicEvent.date.add(15 minutes);
+
+        if (block.timestamp <= upperCheckinTime) {
+            _addAttendeeToCheckedIn(_eventId, msg.sender);
+            emit CheckIn(ourEpicEvent.name, ourEpicEvent.location, msg.sender, block.timestamp);
+        } else {
+            _markEventFailed(ourEpicEvent);
         }
     }
 
@@ -257,10 +281,19 @@ contract EventCreation is PintNight {
     }
 
     // PRIVATE
+    function _markEventFailed(Event storage _event) private {
+        _event.state = State.EVENT_COMPLETE;
+        _event.result = Result.FAIL;
+        emit FailedEvent(_event.name, _event.location, _event.date, block.timestamp);
+    }
 
     // INTERNAL
     function _addAttendeeToEvent(uint _eventId, address _attendee) internal {
         eventToAttendees[_eventId].push(_attendee);
+    }
+
+    function _addAttendeeToCheckedIn(uint _eventId, address _attendee) internal {
+        eventToCheckedIn[_eventId].push(_attendee);
     }
 
     // Keeps track of how much attendees have paid towards the event and operating fees paid.
