@@ -40,6 +40,7 @@ contract PintNight is Ownable {
     mapping (uint => address[]) internal eventToCheckedIn;
     mapping (uint => address) internal eventToHost;
     mapping (uint => address[]) internal eventToInvitees;
+    mapping (uint => address) internal eventToWinner;
 }
 
 // Need to call contract once per day at certain time to transition events to a failure, if applicable.

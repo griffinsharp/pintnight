@@ -19,24 +19,8 @@ contract EventCreation is PintNight {
         address host
     );
 
-    event UserInvited(
-        uint256 eventId,
-        string name,
-        address host,
-        address invited
-    );
-
-    // Either accepted invite or used join code.
-    event UserJoined(
-        uint256 eventId,
-        string name,
-        address acceptedUser,
-        address[] attendees,
-        bool joinedByCode
-    );
-
     // Will want to edit this to include the results (how many attended the event and who won the pint "donation")
-    event CompleteEvent(
+    event SuccessfulEvent(
         uint256 eventId,
         string name,
         string location,
@@ -90,52 +74,36 @@ contract EventCreation is PintNight {
         _;
     }
 
-    modifier onlyInvitee(uint _eventId) {
-        // The below may error out. Trying to shallow copy arr.
-        // Memory arrs need a fixed length.
-        bool isInvitee = false;
-        address[] memory invitees = new address[](eventToInvitees[_eventId].length);
-        invitees = eventToInvitees[_eventId];
-
-        for (uint i = 0; i < invitees.length; i++) {
-            if (invitees[i] == msg.sender) {
-                isInvitee = true;
-            }
-        }
-
-        require(isInvitee, "Only an invitee of this event can call this function.");
-        _;
-    }
-
-    modifier eventInvitePeriod(uint _eventId) {
-        require(events[_eventId].state == State.BEFORE_EVENT, 'It is not the event invite period.');
-        _;
-    }
-
     modifier eventPeriod(uint _eventId) {
         require(events[_eventId].state == State.EVENT_PERIOD, 'It is not the event period.');
         _;
     }
 
-    modifier onlyAttendee(uint _eventId) {
-        // The below may error out. Trying to shallow copy arr.
-        // Memory arrs need a fixed length.
-        // Know if they are host, they are definitely an attendee.
-        bool isAttendee = false;
-        if (eventToHost[_eventId] == msg.sender) {
-            isAttendee = true;
-        } else {
-            address[] memory attendees = new address[](eventToAttendees[_eventId].length);
-            attendees = eventToAttendees[_eventId];
+    modifier eventPeriodOrComplete(uint _eventId) {
+        State eventState = events[_eventId].state;
+        require(eventState == State.EVENT_PERIOD || eventState == State.EVENT_COMPLETE, 'It is not the event or completed event period.');
+        _;
+    }
 
-            for (uint i = 0; i < attendees.length; i++) {
-                if (attendees[i] == msg.sender) {
-                    isAttendee = true;
-                }
+    modifier eventHasWinner(uint _eventId) {
+        require(eventToWinner[_eventId] != 0x0, "Event does not have a pint winner yet.");
+        _;
+    }
+
+    modifier onlyCheckedIn(uint _eventId) {
+        // The below may error out. Trying to shallow copy arr.
+
+        bool isCheckedIn = false;
+        address[] memory checkedInUsers = new address[](eventToCheckedIn[_eventId].length);
+        checkedInUsers = eventToCheckedIn[_eventId];
+
+        for (uint i = 0; i < checkedInUsers.length; i++) {
+            if (checkedInUsers[i] == msg.sender) {
+                isCheckedIn = true;
             }
         }
 
-        require(isAttendee, "Only an attendee of this event can call this function.");
+        require(isCheckedIn, "Only a user who punctually checked-in to this event can call this function.");
         _;
     }
 
@@ -217,83 +185,43 @@ contract EventCreation is PintNight {
     }
 
     // PUBLIC
-    // NEED: 1.) Invite period 2.) Be Invitee 3.) Correct msg.value 4.) Accounting 5.) Add attendee 6.) emit event
-    function acceptInvitation(uint _eventId) public payable eventInvitePeriod(_eventId) onlyInvitee(_eventId) {
-        require(msg.value == events[_eventId].fee, "Incorrect escrow amount. Please use the exact amount specified.");
 
-        _eventAccounting(_eventId, msg.value);
-        _addAttendeeToEvent(_eventId, msg.sender);
-        emit UserJoined(_eventId, events[_eventId].name, msg.sender, eventToAttendees[_eventId], false);
+    // Called by those who actually attended the event.
+    // 1.) Event has a winner. This means decideWinner has been called and event is in COMPLETE.
+    // 2.) Caller has checked-in.
+    function withdrawEventFee(uint _eventId) public eventHasWinner(_eventId) onlyCheckedIn(_eventId) {
+
+        // If you are winner, get initial deposit back + deposit*(eventToAttendees - eventToCheckedIn)
+        // If not, just get initial deposit back.
     }
 
-    // NEED: 1.) Invite Period 2.) Be Host
-    function inviteUser(uint _eventId, address _invited) public eventInvitePeriod(_eventId) onlyHost(_eventId) {
-        eventToInvitees[_eventId].push(_invited);
-        emit UserInvited(_eventId, events[_eventId].name, msg.sender, _invited);
-    }
+    function decideWinner(uint _eventId) public eventPeriodOrComplete(_eventId) onlyCheckedIn(_eventId) {
+        // Check if winner is default address (winner not selected yet)
+        require(eventToWinner[_eventId] == 0x0, "Winner already assigned.");
 
-    // NEED: 1.) Invite Period 2.) Be Attendee 3.) Correct time (be after event date to (date + 15 mins))
-    // Worth noting that both the timestamp and the block hash can be influenced by miners to some degree.
-    // Realistically, abuse isn't really practical here given the nature of the app and amt of Ether involved.
-    function rollCall(uint _eventId) public eventInvitePeriod(_eventId) onlyAttendee(_eventId) {
         Event storage ourEpicEvent = events[_eventId];
         uint upperCheckinTime = ourEpicEvent.date.add(15 minutes);
 
-        // checkInForEvent is only able to be called during the event. This is called when the state is BEFORE_EVENT.
-        // Need to check to make sure it's not being called prematurely.
-        require(ourEpicEvent.date >= block.timestamp, "Event has not yet started. Try checking in again later.");
+        // Possible to NOT have transitioned to COMPLETE just yet, so check time.
+        if (block.timestamp > upperCheckinTime) {
+            if (ourEpicEvent.state == State.EVENT_PERIOD) {
+                ourEpicEvent.state = State.EVENT_COMPLETE;
+            }
 
-        if (block.timestamp <= upperCheckinTime) {
-            ourEpicEvent.state = State.EVENT_PERIOD;
-            _addAttendeeToCheckedIn(_eventId, msg.sender);
-
-            emit EventStarted(ourEpicEvent.name, ourEpicEvent.location, msg.sender, block.timestamp, ourEpicEvent.date);
-            emit CheckIn(ourEpicEvent.name, ourEpicEvent.location, msg.sender, block.timestamp);
-        } else {
-            _markEventFailed(ourEpicEvent);
+            // rand should be a pseudo random number the length of the chekedIn array - 1 (last index).
+            uint256 rand = _getRandomNum(eventToCheckedIn[_eventId].length);
+            address winner = eventToCheckedIn[_eventId][rand];
+            eventToWinner[_eventId] = winner;
+            emit PintWinner();
         }
-    }
 
-    function checkInForEvent(uint _eventId) public eventPeriod(_eventId) onlyAttendee(_eventId) {
-        Event storage ourEpicEvent = events[_eventId];
-        uint upperCheckinTime = ourEpicEvent.date.add(15 minutes);
-
-        if (block.timestamp <= upperCheckinTime) {
-            _addAttendeeToCheckedIn(_eventId, msg.sender);
-            emit CheckIn(ourEpicEvent.name, ourEpicEvent.location, msg.sender, block.timestamp);
-        } else {
-            _markEventFailed(ourEpicEvent);
-        }
-    }
-
-    // Users can also join events if they have the correct join code without being invited first.
-    // Anyone who has code can join, so keep it secret!
-    // We never want to expose our actual input and convert to hash afterwards inside the contract.
-    // Hash on the frontend with web3. Call function. Compare hashes.
-    // NEED: 1.) Invite period 2.) Correct join code 3.) Correct msg.value
-    function joinEventByInviteCode(uint _eventId, bytes32 _inviteCode) public payable eventInvitePeriod(_eventId) {
-        require(_inviteCode == events[_eventId].code, "Incorrect join code.");
-        require(msg.value == events[_eventId].fee, "Incorrect escrow amount. Please use the exact amount specified.");
-
-        _eventAccounting(_eventId, msg.value);
-        _addAttendeeToEvent(_eventId, msg.sender);
-        emit UserJoined(_eventId, events[_eventId].name, msg.sender, eventToAttendees[_eventId], true);
     }
 
     // PRIVATE
-    function _markEventFailed(Event storage _event) private {
-        _event.state = State.EVENT_COMPLETE;
-        _event.result = Result.FAIL;
-        emit FailedEvent(_event.name, _event.location, _event.date, block.timestamp);
-    }
 
     // INTERNAL
     function _addAttendeeToEvent(uint _eventId, address _attendee) internal {
         eventToAttendees[_eventId].push(_attendee);
-    }
-
-    function _addAttendeeToCheckedIn(uint _eventId, address _attendee) internal {
-        eventToCheckedIn[_eventId].push(_attendee);
     }
 
     // Keeps track of how much attendees have paid towards the event and operating fees paid.
