@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 import "./EventCreation.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
-
 contract EventInvite is EventCreation {
 
     using SafeMath for uint256;
@@ -33,12 +32,16 @@ contract EventInvite is EventCreation {
         _;
     }
 
+    modifier onlyHost(uint _eventId) {
+        require(msg.sender == eventToHost[_eventId], "Only the host of this event can call this function.");
+        _;
+    }
+
     modifier onlyInvitee(uint _eventId) {
         // The below may error out. Trying to shallow copy arr.
         // Memory arrs need a fixed length.
         bool isInvitee = false;
-        address[] memory invitees = new address[](eventToInvitees[_eventId].length);
-        invitees = eventToInvitees[_eventId];
+        address[] memory invitees = eventToInvitees[_eventId];
 
         for (uint i = 0; i < invitees.length; i++) {
             if (invitees[i] == msg.sender) {
@@ -73,11 +76,11 @@ contract EventInvite is EventCreation {
     }
 
     // Users can also join events if they have the correct join code without being invited first.
-    // Anyone who has code can join, so keep it secret!
-    // We never want to expose our actual input and convert to hash afterwards inside the contract.
-    // Hash on the frontend with web3. Call function. Compare hashes.
-    // NEED: 1.) Invite period 2.) Correct join code 3.) Correct msg.value
-    function joinEventByInviteCode(uint _eventId, bytes32 _inviteCode) public payable eventInvitePeriod(_eventId) {
+    // Though we hash before we store the password, the first user who enters the passcode will reveal it.
+    // This is more of a UX feature to safeguard against users accidentally signing up for the wrong event.
+    // Because of this, we also check if the user is an invitee of the event. That way, not just anyone can use the password once revealed.
+    // NEED: 1.) Invite period 2.) Is an Invitee 3.) Correct join code 4.) Correct msg.value
+    function joinEventByInviteCode(uint _eventId, bytes32 _inviteCode) public payable eventInvitePeriod(_eventId) onlyInvitee(_eventId) {
         require(_inviteCode == events[_eventId].code, "Incorrect join code.");
         require(msg.value == events[_eventId].fee, "Incorrect escrow amount. Please use the exact amount specified.");
 
@@ -87,11 +90,7 @@ contract EventInvite is EventCreation {
     }
 
 
-
     // INTERNAL
-
     // PRIVATE
-
-    // (normal/view/pure order within groupings)
 
 }

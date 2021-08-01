@@ -9,6 +9,37 @@ contract EventCheckIn is EventInvite  {
     using SafeMath for uint32;
     using SafeMath for uint16;
 
+    // EVENTS
+    event CheckIn(
+        string eventName,
+        string location,
+        address userAddress,
+        uint256 checkInTime
+    );
+
+    event EventStarted(
+        string eventName,
+        string location,
+        address userAddress,
+        uint256 stateTransitionTime,
+        uint256 eventDate
+    );
+
+    event FailedEvent(
+        string name,
+        string location,
+        uint256 eventDate,
+        uint256 stateTransitionTime
+    );
+
+    // VARS
+
+    // MODIFIERS
+    modifier eventPeriod(uint _eventId) {
+        require(events[_eventId].state == State.EVENT_PERIOD, 'It is not the event period.');
+        _;
+    }
+
     modifier onlyAttendee(uint _eventId) {
         // The below may error out. Trying to shallow copy arr.
         // Memory arrs need a fixed length.
@@ -17,9 +48,7 @@ contract EventCheckIn is EventInvite  {
         if (eventToHost[_eventId] == msg.sender) {
             isAttendee = true;
         } else {
-            address[] memory attendees = new address[](eventToAttendees[_eventId].length);
-            attendees = eventToAttendees[_eventId];
-
+            address[] memory attendees = eventToAttendees[_eventId];
             for (uint i = 0; i < attendees.length; i++) {
                 if (attendees[i] == msg.sender) {
                     isAttendee = true;
@@ -31,11 +60,12 @@ contract EventCheckIn is EventInvite  {
         _;
     }
 
+
     // RECEIVE (IF EXISTS)
     // FALLBACK (IF EXISTS)
     // EXTERNAL
-    // PUBLIC
 
+    // PUBLIC
     function checkInForEvent(uint _eventId) public eventPeriod(_eventId) onlyAttendee(_eventId) {
         Event storage ourEpicEvent = events[_eventId];
         uint upperCheckinTime = ourEpicEvent.date.add(15 minutes);
@@ -74,19 +104,15 @@ contract EventCheckIn is EventInvite  {
     }
 
     // INTERNAL
-    function _addAttendeeToCheckedIn(uint _eventId, address _attendee) internal {
-        eventToCheckedIn[_eventId].push(_attendee);
-    }
 
     // PRIVATE
+    function _addAttendeeToCheckedIn(uint _eventId, address _attendee) private {
+        eventToCheckedIn[_eventId].push(_attendee);
+    }
 
     function _markEventFailed(Event storage _event) private {
         _event.state = State.EVENT_COMPLETE;
         _event.result = Result.FAIL;
         emit FailedEvent(_event.name, _event.location, _event.date, block.timestamp);
     }
-
-
-    // (normal/view/pure order within groupings)
-
 }

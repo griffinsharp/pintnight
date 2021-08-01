@@ -2,6 +2,9 @@
 // .sol extension only added for IDE coloring.
 
 // FN ORDER:
+// EVENTS
+// VARS
+// MODIFIERS
 // CONSTRUCTOR
 // RECEIVE (IF EXISTS)
 // FALLBACK (IF EXISTS)

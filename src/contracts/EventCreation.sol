@@ -4,8 +4,10 @@ import "./PintNight.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 contract EventCreation is PintNight {
+    // To Do: Audit visibility of fns (private, public, etc.)
     // To Do: add NatSpec comments
     // To Do: remove whatever you aren't using here
+    // Overall, audit use of uint sizes. Can prob save alot here.
     using SafeMath for uint256;
     using SafeMath for uint32;
     using SafeMath for uint16;
@@ -19,48 +21,10 @@ contract EventCreation is PintNight {
         address host
     );
 
-    // Will want to edit this to include the results (how many attended the event and who won the pint "donation")
-    event SuccessfulEvent(
-        uint256 eventId,
-        string name,
-        string location,
-        uint256 date,
-        address host,
-        address[] attendees
-    );
-
-    event PintWinner(
-
-    );
-
-    event FailedEvent(
-        string name,
-        string location,
-        uint256 eventDate,
-        uint256 stateTransitionTime
-    );
-
-    // User checks in
-    event CheckIn(
-        string eventName,
-        string location,
-        address userAddress,
-        uint256 checkInTime
-    );
-
-    event EventStarted(
-        string eventName,
-        string location,
-        address userAddress,
-        uint256 stateTransitionTime,
-        uint256 eventDate
-    );
-
     // VARS
-    // Fee = escrow amount the host sets when creating the event.
+    // Fee = escrow amount the host sets when creating the event. NOT the operating fee.
     // $1.88 USD to $18.82 USD roughly.
-    // UI should reccomend $5-10 USD in ether (avg pub beer price).
-    // To Do: Can I save on uint amt here to smaller uint#?
+    // UI should reccomend $5-15 USD in ether (avg pub beer price).
     uint256 minFee = 0.001 ether;
     uint256 maxFee = 0.01 ether;
 
@@ -69,43 +33,6 @@ contract EventCreation is PintNight {
     uint256 operatingFeePercentage = 300;
 
     // MODIFIERS
-    modifier onlyHost(uint _eventId) {
-        require(msg.sender == eventToHost[_eventId], "Only the host of this event can call this function.");
-        _;
-    }
-
-    modifier eventPeriod(uint _eventId) {
-        require(events[_eventId].state == State.EVENT_PERIOD, 'It is not the event period.');
-        _;
-    }
-
-    modifier eventPeriodOrComplete(uint _eventId) {
-        State eventState = events[_eventId].state;
-        require(eventState == State.EVENT_PERIOD || eventState == State.EVENT_COMPLETE, 'It is not the event or completed event period.');
-        _;
-    }
-
-    modifier eventHasWinner(uint _eventId) {
-        require(eventToWinner[_eventId] != 0x0, "Event does not have a pint winner yet.");
-        _;
-    }
-
-    modifier onlyCheckedIn(uint _eventId) {
-        // The below may error out. Trying to shallow copy arr.
-
-        bool isCheckedIn = false;
-        address[] memory checkedInUsers = new address[](eventToCheckedIn[_eventId].length);
-        checkedInUsers = eventToCheckedIn[_eventId];
-
-        for (uint i = 0; i < checkedInUsers.length; i++) {
-            if (checkedInUsers[i] == msg.sender) {
-                isCheckedIn = true;
-            }
-        }
-
-        require(isCheckedIn, "Only a user who punctually checked-in to this event can call this function.");
-        _;
-    }
 
     // CONSTRUCTOR
     // Use custom fuction to initiate contract details upon call from FE app.
@@ -158,7 +85,6 @@ contract EventCreation is PintNight {
     }
 
     // RECEIVE (if exists)
-
     // FALLBACK (if exists)
 
     // EXTERNAL
@@ -185,37 +111,6 @@ contract EventCreation is PintNight {
     }
 
     // PUBLIC
-
-    // Called by those who actually attended the event.
-    // 1.) Event has a winner. This means decideWinner has been called and event is in COMPLETE.
-    // 2.) Caller has checked-in.
-    function withdrawEventFee(uint _eventId) public eventHasWinner(_eventId) onlyCheckedIn(_eventId) {
-
-        // If you are winner, get initial deposit back + deposit*(eventToAttendees - eventToCheckedIn)
-        // If not, just get initial deposit back.
-    }
-
-    function decideWinner(uint _eventId) public eventPeriodOrComplete(_eventId) onlyCheckedIn(_eventId) {
-        // Check if winner is default address (winner not selected yet)
-        require(eventToWinner[_eventId] == 0x0, "Winner already assigned.");
-
-        Event storage ourEpicEvent = events[_eventId];
-        uint upperCheckinTime = ourEpicEvent.date.add(15 minutes);
-
-        // Possible to NOT have transitioned to COMPLETE just yet, so check time.
-        if (block.timestamp > upperCheckinTime) {
-            if (ourEpicEvent.state == State.EVENT_PERIOD) {
-                ourEpicEvent.state = State.EVENT_COMPLETE;
-            }
-
-            // rand should be a pseudo random number the length of the chekedIn array - 1 (last index).
-            uint256 rand = _getRandomNum(eventToCheckedIn[_eventId].length);
-            address winner = eventToCheckedIn[_eventId][rand];
-            eventToWinner[_eventId] = winner;
-            emit PintWinner();
-        }
-
-    }
 
     // PRIVATE
 
