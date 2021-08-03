@@ -101,9 +101,7 @@ contract EventFinish is EventCheckIn  {
         address winnerAddress = eventToWinner[_eventId];
         Event memory epicEvent = events[_eventId];
 
-        uint calculatedPercentage = operatingFeePercentage.div(10000);
-        uint256 operatingFee = epicEvent.fee.mul(calculatedPercentage);
-        uint256 amtUserPaidPostFees = epicEvent.fee.sub(operatingFee);
+        uint256 amtUserPaidPostFees = epicEvent.fee.sub(epicEvent.fee.mul(operatingFeePercentage.div(10000)));
 
         if (eventToCheckedIn[_eventId].length == 1) {
             // Since there is a winner, only one person checked in, tranfer them the whole balance.
@@ -119,17 +117,11 @@ contract EventFinish is EventCheckIn  {
             // Know checkedIn is not 0 (hasWinner) or 1 (above conditional). Check if everyone checked in to attend the event.
             if (winnerAddress == msg.sender) {
                 uint256 userWinnings = amtUserPaidPostFees.mul(2);
-                eventToBalance[_eventId] = eventToBalance[_eventId].sub(userWinnings);
-                eventToPaidOut[_eventId].push(msg.sender);
-
-                payable(winnerAddress).transfer(userWinnings);
+                _payOutUser(_eventId, userWinnings);
             } else {
                 // If they're not winner, need to count for the fact that user wins a free pint from everyone else (-1).
                 uint256 userWinnings = amtUserPaidPostFees - (amtUserPaidPostFees.div((eventToAttendees[_eventId].length - 1)));
-                eventToBalance[_eventId] = eventToBalance[_eventId].sub(userWinnings);
-                eventToPaidOut[_eventId].push(msg.sender);
-
-                payable(msg.sender).transfer(userWinnings);
+                _payOutUser(_eventId, userWinnings);
             }
         } else {
             // Know it's not 0, 1, or the same number, so attendees > checked in. Those who did not check-in, lose deposit.
@@ -139,17 +131,11 @@ contract EventFinish is EventCheckIn  {
                 // Get all the attendees who did not checkIn + initial deposit
                 uint256 noShowAmt = (eventToAttendees[_eventId].length.sub(eventToCheckedIn[_eventId].length));
                 uint256 userWinnings = amtUserPaidPostFees + amtUserPaidPostFees.mul(noShowAmt);
-                eventToBalance[_eventId] = eventToBalance[_eventId].sub(userWinnings);
-                eventToPaidOut[_eventId].push(msg.sender);
-
-                payable(msg.sender).transfer(userWinnings);
+                _payOutUser(_eventId, userWinnings);
             } else {
                 // Get just initial deposit if attended
                 uint256 userWinnings = amtUserPaidPostFees;
-                eventToBalance[_eventId] = eventToBalance[_eventId].sub(userWinnings);
-                eventToPaidOut[_eventId].push(msg.sender);
-
-                payable(msg.sender).transfer(userWinnings);
+                _payOutUser(_eventId, userWinnings);
             }
         }
     }
@@ -159,5 +145,11 @@ contract EventFinish is EventCheckIn  {
     function _getRandomNum(uint _numberOfUsers) private returns(uint) {
         randNonce = randNonce.add(1);
         return uint(keccak256(abi.encodePacked(block.timestamp, msg.sender, randNonce))) % _numberOfUsers;
+    }
+
+    function _payOutUser(uint _eventId, uint _userWinnings) private {
+        eventToBalance[_eventId] = eventToBalance[_eventId].sub(_userWinnings);
+        eventToPaidOut[_eventId].push(msg.sender);
+        payable(msg.sender).transfer(_userWinnings);
     }
 }

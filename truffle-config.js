@@ -1,3 +1,6 @@
+require('babel-register');
+require('babel-polyfill');
+
 module.exports = {
   networks: {
     development: {
@@ -7,9 +10,10 @@ module.exports = {
     },
   },
   contracts_directory: './src/contracts/',
-  contracts_build_directory: './src/abis/',
+  contracts_build_directory: './src/artifacts/',
   compilers: {
     solc: {
+      version: "^0.8.0",
       optimizer: {
         enabled: true,
         runs: 200
